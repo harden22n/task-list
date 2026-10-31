@@ -56,10 +56,24 @@ section h2 .count { font-size: 0.8rem; color: var(--muted); font-weight: 400; fo
 h3 { font-size: 0.8rem; color: var(--muted); margin: 0; padding: 10px 14px 2px; }
 ul { list-style: none; margin: 0; padding: 4px 0 8px; }
 li + li { border-top: 1px dashed var(--line); }
-label.task { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 9px 14px; align-items: start; cursor: pointer; }
-label.task input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--accent); cursor: pointer; }
+button.task { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 9px 14px; align-items: start; cursor: pointer; width: 100%; text-align: left; background: none; border: 0; color: inherit; }
+.box { width: 20px; height: 20px; margin-top: 2px; border: 2px solid var(--muted); border-radius: 4px; display: grid; place-items: center; font-size: 13px; line-height: 1; font-weight: 700; }
+.done .box { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.skipped .box { border-color: var(--line); color: var(--muted); }
 .text { min-width: 0; overflow-wrap: anywhere; }
-.done .t { text-decoration: line-through; color: var(--muted); }
+.done .t, .skipped .t { text-decoration: line-through; color: var(--muted); }
+.tag.skip { background: var(--line); color: var(--muted); }
+dialog.sheet { border: 0; padding: 0; margin: auto auto 0; width: 100%; max-width: 640px; background: var(--surface); color: var(--fg); border-radius: 16px 16px 0 0; }
+dialog.sheet::backdrop { background: rgba(0, 0, 0, 0.45); }
+.sheet-body { padding: 18px max(16px, env(safe-area-inset-left, 0px)) max(18px, env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; }
+.sheet-title { font-weight: 700; margin: 0; overflow-wrap: anywhere; }
+.sheet-note { color: var(--muted); font-size: 0.85rem; margin: -6px 0 4px; overflow-wrap: anywhere; }
+.act { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.act b { font-size: 0.95rem; }
+.act span { font-size: 0.78rem; color: var(--muted); }
+.act.main { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.act.main span { color: var(--bg); opacity: 0.85; }
+.act.cancel { text-align: center; background: none; border: 0; color: var(--muted); }
 .note { display: block; color: var(--muted); font-size: 0.82rem; }
 .tag { display: inline-block; font-size: 0.7rem; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; white-space: nowrap; }
 .tag.memory { background: var(--warn-soft); color: var(--warn); }
@@ -100,6 +114,8 @@ footer { color: var(--muted); font-size: 0.8rem; }
     <div class="row"><label for="s-owner">GitHubのユーザー名</label><input id="s-owner" autocomplete="off" autocapitalize="off" spellcheck="false" value="harden22n"></div>
     <div class="row"><label for="s-repo">データのリポジトリ名</label><input id="s-repo" autocomplete="off" autocapitalize="off" spellcheck="false" value="task-data"></div>
     <div class="row"><label for="s-token">アクセス用の鍵（トークン）</label><input id="s-token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…"></div>
+    <div class="row"><label for="s-cc">「Claudeと進める」で開くClaude CodeのページのURL（なくてもよい）</label><input id="s-cc" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://claude.ai/code/…"></div>
+    <p class="help">PCのClaude Codeで Remote Control を入れているセッションのURLを、スマホのClaudeアプリやブラウザからコピーして貼ってください。空のときは、新しいチャットで開きます。</p>
     <button class="primary" type="submit">保存して読み込む</button>
     <p class="msg" id="s-msg" aria-live="polite"></p>
   </form>
@@ -122,12 +138,24 @@ footer { color: var(--muted); font-size: 0.8rem; }
     </form>
 
     <details class="done-box" style="margin-top:16px">
-      <summary>完了したタスク <span id="c-done"></span></summary>
+      <summary>完了・やらないにしたタスク <span id="c-done"></span></summary>
       <ul id="done-list"></ul>
     </details>
   </div>
 
-  <footer>チェックや追加はすぐに保存されます。Obsidianへは1日3回（7時・12時・19時）PCが同期します。「未確認」はClaudeのメモリ（2026-10-31時点）から拾ったもの、「スマホで追加」はまだObsidianに入っていないものです。</footer>
+  <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
+    <div class="sheet-body">
+      <p class="sheet-title" id="sheet-title"></p>
+      <p class="sheet-note" id="sheet-note"></p>
+      <button class="act main" id="act-done" type="button"><b>完了にする</b><span>終わったタスクとして記録します</span></button>
+      <button class="act" id="act-claude" type="button"><b>Claudeと進める</b><span id="act-claude-sub">このタスクの内容を入れた状態でClaudeを開きます</span></button>
+      <button class="act" id="act-skip" type="button"><b>やらない</b><span>やらないと決めたタスクとして記録します</span></button>
+      <button class="act" id="act-reopen" type="button"><b>未完了に戻す</b><span>もう一度やることに戻します</span></button>
+      <button class="act cancel" id="act-cancel" type="button">閉じる</button>
+    </div>
+  </dialog>
+
+  <footer>タスクをタップすると、完了・Claudeと進める・やらないを選べます。変更はすぐに保存されます。Obsidianへは1日3回（7時・12時・19時）PCが同期します。「未確認」はClaudeのメモリ（2026-10-31時点）から拾ったもの、「スマホで追加」はまだObsidianに入っていないものです。</footer>
 </div>
 
 <script>
@@ -215,30 +243,82 @@ async function load(quiet) {
 
 // ---- 表示 ----
 function taskRow(t) {
-  const li = el("li", t.done ? "done" : "");
-  const lab = el("label", "task");
-  const cb = document.createElement("input");
-  cb.type = "checkbox"; cb.id = "cb-" + t.id; cb.checked = !!t.done;
-  cb.addEventListener("change", async () => {
-    const v = cb.checked; cb.disabled = true;
-    try {
-      await change(d => { const x = d.tasks.find(y => y.id === t.id); if (x) { x.done = v; x.doneAt = v ? new Date().toISOString() : ""; } },
-        (v ? "完了: " : "未完了に戻す: ") + t.text);
-    } catch (e) { cb.checked = !v; setStatus(e.message, "err"); }
-    finally { cb.disabled = false; }
-  });
+  const li = el("li", t.done ? "done" : t.skipped ? "skipped" : "");
+  const btn = el("button", "task"); btn.type = "button"; btn.id = "task-" + t.id;
+  btn.append(el("span", "box", t.done ? "✓" : t.skipped ? "－" : ""));
   const tx = el("span", "text");
   tx.append(el("span", "t", t.text));
+  if (t.skipped) tx.append(el("span", "tag skip", "やらない"));
   if (t.memory) tx.append(el("span", "tag memory", "未確認"));
   if (t.from === "phone" && !t.synced) tx.append(el("span", "tag phone", "スマホで追加"));
   if (t.note) tx.append(el("span", "note", t.note));
-  lab.append(cb, tx); li.append(lab);
+  btn.append(tx); li.append(btn);
+  btn.addEventListener("click", () => openSheet(t));
   return li;
 }
 
+// ---- タップしたときの選択肢 ----
+let sheetTask = null;
+function openSheet(t) {
+  sheetTask = t;
+  const closed = t.done || t.skipped;
+  $("sheet-title").textContent = t.text;
+  $("sheet-note").textContent = t.note || ""; $("sheet-note").hidden = !t.note;
+  $("act-done").hidden = closed; $("act-skip").hidden = closed; $("act-claude").hidden = closed;
+  $("act-reopen").hidden = !closed;
+  $("act-claude-sub").textContent = ccUrl()
+    ? "PCのClaude Codeを開きます。依頼文はコピー済みなので、入力欄に貼り付けて送ってください"
+    : "このタスクの内容を入れた状態で、新しいチャットを開きます";
+  $("sheet").showModal();
+}
+function closeSheet() { $("sheet").close(); }
+
+async function setState(state) {
+  const t = sheetTask; if (!t) return;
+  closeSheet();
+  const now = new Date().toISOString();
+  const label = { done: "完了: ", skipped: "やらない: ", open: "未完了に戻す: " }[state];
+  try {
+    await change(d => {
+      const x = d.tasks.find(y => y.id === t.id); if (!x) return;
+      x.done = state === "done"; x.doneAt = state === "done" ? now : "";
+      x.skipped = state === "skipped"; x.skippedAt = state === "skipped" ? now : "";
+      // PCの同期に「アプリで戻した」ことを伝える（同期後に消える）
+      if (state === "open") x.reopenedAt = now; else delete x.reopenedAt;
+    }, label + t.text);
+  } catch (e) { setStatus(e.message, "err"); }
+}
+
+function ccUrl() { const u = store.get("ccUrl") || ""; return /^https:\/\/claude\.ai\//.test(u) ? u : ""; }
+
+function claudePrompt(t) {
+  const lines = ccUrl()
+    ? ["タスク一覧（タスク一覧.md）のこのタスクを進めたいので、手伝ってください。（アプリのID：" + t.id + "）", "", "タスク：" + t.text]
+    : ["次のタスクを進めたいので、手伝ってください。", "", "タスク：" + t.text];
+  if (t.note) lines.push("メモ：" + t.note);
+  lines.push("分野：" + (t.area || "その他") + (t.group ? "／" + t.group : ""));
+  if (t.memory) lines.push("（このタスクは以前の会話から拾ったもので、今の進み具合は分かっていません）");
+  lines.push("", "まず今どこまで進んでいるかを私に1つだけ質問してから、次の一歩を具体的に提案してください。");
+  return lines.join("\n");
+}
+
+$("act-done").addEventListener("click", () => setState("done"));
+$("act-skip").addEventListener("click", () => setState("skipped"));
+$("act-reopen").addEventListener("click", () => setState("open"));
+$("act-cancel").addEventListener("click", closeSheet);
+$("sheet").addEventListener("click", e => { if (e.target === $("sheet")) closeSheet(); });
+$("act-claude").addEventListener("click", () => {
+  const t = sheetTask; if (!t) return;
+  const text = claudePrompt(t);
+  try { navigator.clipboard && navigator.clipboard.writeText(text).catch(() => {}); } catch (e) {}
+  closeSheet();
+  const cc = ccUrl();
+  window.open(cc || "https://claude.ai/new?q=" + encodeURIComponent(text), "_blank");
+});
+
 function render() {
   const tasks = (data && data.tasks || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
-  const open = tasks.filter(t => !t.done), done = tasks.filter(t => t.done);
+  const open = tasks.filter(t => !t.done && !t.skipped), done = tasks.filter(t => t.done || t.skipped);
   const mem = open.filter(t => t.memory).length;
   $("c-all").textContent = open.length; $("c-memory").textContent = mem;
   $("c-confirmed").textContent = open.length - mem; $("c-done").textContent = "(" + done.length + ")";
@@ -261,7 +341,8 @@ function render() {
   if (!list.children.length) list.append(el("p", "empty", data ? "この表示に当てはまるタスクはありません。" : "まだ読み込んでいません。"));
 
   const dl = $("done-list"); dl.replaceChildren();
-  done.sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || "")).forEach(t => dl.append(taskRow(t)));
+  const closedAt = t => t.doneAt || t.skippedAt || "";
+  done.sort((a, b) => closedAt(b).localeCompare(closedAt(a))).forEach(t => dl.append(taskRow(t)));
   if (!done.length) dl.append(el("li", "empty", "まだありません。"));
   if (data && data.updatedAt) $("sub").textContent = "最終更新 " + new Date(data.updatedAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
@@ -293,6 +374,7 @@ function openSettings(first) {
   if (c.owner) $("s-owner").value = c.owner;
   if (c.repo) $("s-repo").value = c.repo;
   $("s-token").value = c.token;
+  $("s-cc").value = store.get("ccUrl") || "";
   $("settings").hidden = false;
   if (first) setStatus("最初に設定を入れてください。", "warn");
   $("s-token").focus();
@@ -302,6 +384,7 @@ $("reload-btn").addEventListener("click", () => load(false));
 $("settings").addEventListener("submit", async ev => {
   ev.preventDefault();
   store.set("owner", $("s-owner").value.trim()); store.set("repo", $("s-repo").value.trim()); store.set("token", $("s-token").value.trim());
+  store.set("ccUrl", $("s-cc").value.trim());
   $("s-msg").textContent = "確かめています…";
   await load(false);
   if (sha) { $("settings").hidden = true; $("s-msg").textContent = ""; } else { $("s-msg").textContent = $("status").textContent; }
