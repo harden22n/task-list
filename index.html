@@ -41,7 +41,7 @@ header h1 { font-size: 1.4rem; margin: 0; }
 header .sub { margin: 2px 0 0; color: var(--muted); font-size: 0.8rem; }
 button, input, select { font: inherit; }
 .icon-btn { border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 0.85rem; white-space: nowrap; }
-.status { font-size: 0.85rem; padding: 8px 12px; border-radius: 8px; margin: 0; }
+.status { font-size: 0.85rem; padding: 8px 12px; border-radius: 8px; margin: 0; position: sticky; top: max(8px, env(safe-area-inset-top, 0px)); z-index: 5; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); }
 .status.info { color: var(--muted); background: var(--accent-soft); }
 .status.warn { color: var(--warn); background: var(--warn-soft); }
 .status.err { color: var(--err); background: var(--err-soft); }
@@ -187,7 +187,7 @@ function b64encode(str) { const bytes = new TextEncoder().encode(str); let bin =
 
 function explain(res) {
   if (res.status === 401) return "鍵（トークン）が正しくないか、期限が切れています。設定を開いて入れ直してください。";
-  if (res.status === 403) return "この鍵ではデータを読み書きできません。鍵の権限（Contents の Read and write）を確かめてください。";
+  if (res.status === 403) return "この鍵では保存できません（読み取り専用の可能性）。GitHubで鍵の権限「Contents」を「Read and write」にして、設定から入れ直してください。";
   if (res.status === 404) return "データが見つかりません。ユーザー名・リポジトリ名と、tasks.json があるかを確かめてください。";
   return "GitHubとの通信に失敗しました（" + res.status + "）。少し待ってから再読み込みしてください。";
 }
@@ -278,6 +278,7 @@ async function setState(state) {
   closeSheet();
   const now = new Date().toISOString();
   const label = { done: "完了: ", skipped: "やらない: ", open: "未完了に戻す: " }[state];
+  setStatus("保存しています…");
   try {
     await change(d => {
       const x = d.tasks.find(y => y.id === t.id); if (!x) return;
@@ -286,7 +287,7 @@ async function setState(state) {
       // PCの同期に「アプリで戻した」ことを伝える（同期後に消える）
       if (state === "open") x.reopenedAt = now; else delete x.reopenedAt;
     }, label + t.text);
-  } catch (e) { setStatus(e.message, "err"); }
+  } catch (e) { setStatus("保存できませんでした：" + ((e && e.message) || e), "err"); }
 }
 
 function ccUrl() { const u = store.get("ccUrl") || ""; return /^https:\/\/claude\.ai\//.test(u) ? u : ""; }
